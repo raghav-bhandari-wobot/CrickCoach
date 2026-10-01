@@ -1,0 +1,16 @@
+services:
+  analyser:
+    build: .
+    image: batsman-analyser:0.1
+    volumes:
+      - ./videos:/app/videos
+      - ./out:/app/out
+      - ./weights:/app/weights
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # Example: docker compose run --rm analyser videos/clip.mp4 --no-show

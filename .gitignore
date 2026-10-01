@@ -1,0 +1,16 @@
+# environments / caches
+.venv/
+__pycache__/
+*.pyc
+
+# large or generated data - not source
+videos/
+out/
+weights/
+*.npz
+*.pt
+*.ts
+
+# scratch
+*.log
+New Text Document.txt

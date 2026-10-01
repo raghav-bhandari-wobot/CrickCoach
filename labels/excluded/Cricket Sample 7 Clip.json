@@ -1,0 +1,24 @@
+{
+ "video": "videos/Cricket Sample 7 Clip.mp4",
+ "fps": 30.0,
+ "precision_s": 1.0,
+ "note": "user ground truth, impact to the second (mm:ss)",
+ "shots": [
+  {
+   "impact": 600,
+   "impact_s": 20
+  },
+  {
+   "impact": 1170,
+   "impact_s": 39
+  },
+  {
+   "impact": 2340,
+   "impact_s": 78
+  },
+  {
+   "impact": 2820,
+   "impact_s": 94
+  }
+ ]
+}

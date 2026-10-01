@@ -1,0 +1,7 @@
+# torch/torchvision are installed separately (CUDA wheels) - see setup_venv.bat / Dockerfile
+ultralytics>=8.4.0
+opencv-python>=4.9
+numpy>=1.26
+scipy>=1.11
+matplotlib>=3.8
+imageio-ffmpeg>=0.5

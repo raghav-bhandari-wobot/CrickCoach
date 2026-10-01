@@ -1,0 +1,6 @@
+.venv
+out
+videos
+weights
+__pycache__
+*.npz

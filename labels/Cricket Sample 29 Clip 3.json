@@ -1,0 +1,44 @@
+{
+ "video": "videos/Cricket Sample 29 Clip 3.mp4",
+ "fps": 30.0,
+ "precision_s": 1.0,
+ "note": "user ground truth, impact to the second (mm:ss)",
+ "shots": [
+  {
+   "impact": 150,
+   "impact_s": 5
+  },
+  {
+   "impact": 570,
+   "impact_s": 19
+  },
+  {
+   "impact": 870,
+   "impact_s": 29
+  },
+  {
+   "impact": 1260,
+   "impact_s": 42
+  },
+  {
+   "impact": 1710,
+   "impact_s": 57
+  },
+  {
+   "impact": 2130,
+   "impact_s": 71
+  },
+  {
+   "impact": 2580,
+   "impact_s": 86
+  },
+  {
+   "impact": 3120,
+   "impact_s": 104
+  },
+  {
+   "impact": 3510,
+   "impact_s": 117
+  }
+ ]
+}

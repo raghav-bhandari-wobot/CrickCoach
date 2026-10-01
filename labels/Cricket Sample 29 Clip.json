@@ -1,0 +1,11 @@
+{
+  "video": "videos/Cricket Sample 29 Clip.mp4",
+  "fps": 30.0,
+  "note": "4 deliveries (user, to the second: 00:10 00:23 00:36 00:49); impact frames refined by eye frame-by-frame",
+  "shots": [
+    {"impact": 306},
+    {"impact": 690},
+    {"impact": 1085},
+    {"impact": 1460}
+  ]
+}
