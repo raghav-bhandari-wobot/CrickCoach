@@ -1,0 +1,29 @@
+{
+ "video": "videos/Cricket Sample 29 Clip 4.mp4",
+ "fps": 30.0,
+ "precision_s": 0.5,
+ "note": "detections of the alpha prototype (commit 396f5eb), confirmed correct by the user in the annotated video",
+ "shots": [
+  {
+   "impact": 155
+  },
+  {
+   "impact": 638
+  },
+  {
+   "impact": 1552
+  },
+  {
+   "impact": 2142
+  },
+  {
+   "impact": 2493
+  },
+  {
+   "impact": 3373
+  },
+  {
+   "impact": 4097
+  }
+ ]
+}

@@ -50,9 +50,11 @@ Per shot (a shot = a still, set stance followed by a fast hands-DOWN downswing; 
 | **impact** | **head lowest** in `[p, p+0.6 s]` - the batter is over the ball at contact. Works for vertical and horizontal bat shots (hand height fails on cuts/pulls). Audio crack overrides when clean. Fallback: hands' lowest point. |
 | **follow-through end** | hands reach 85 % of their finishing height, then first 0.15 s of stillness |
 | front-foot lift / plant | burst of front-ankle speed before impact; plant = speed < 0.6 TU/s for 3 frames |
+| ball (optional) | confirmation only: a live ball near the bat in >= 3 frames around the swing -> `ball_confirmed`, impact confidence high; also admits softer swings without a set stance (downswing >= 1.5 TU/s). Never creates a shot alone, never moves impact. |
 | leave | from a set stance the hands go up fast and never come back down (low confidence - no ball detection) |
 
 Measured on `Cricket Sample 29 Clip` (4 deliveries, labels/): recall 4/4, precision 4/4, impact MAE 58 ms (all ≤ 2 frames).
+All labelled clips (Sample 29 x4 + YouTube clip 1, 26 balls): recall 100 %, precision 96 % with ball confirmation (the 1 false + is a slow-mo replay).
 The previous rule set (engagement peaks) gave 12 detections for the same 4 balls.
 
 Handedness: front foot = ankle that moves more toward the camera; COCO-left front foot ⇒ right-hander (override `--hand`).

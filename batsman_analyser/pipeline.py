@@ -7,10 +7,10 @@ import numpy as np
 
 from .config import Config
 from .feedback import coaching_feedback
-from .inference import run_bat, run_pose
+from .inference import run_ball, run_bat, run_pose
 from .kpis import compute_kpis
 from .phases import PHASES, analyse_phases
-from .signals import build_signals
+from .signals import ball_evidence, build_signals
 from .tracking import select_batsman, track
 from .video_io import read_audio, scene_cuts, video_meta
 
@@ -81,9 +81,24 @@ def analyse(video, out_dir, cfg: Config = None, hand="auto", use_bat=True, recom
     S["video_fps"] = meta["fps"]
     log(f"[signals] TU = {S['TU']:.1f}px, bat tracked in {S['bat_valid'].mean() * 100:.0f}% of frames")
 
+    # ---- ball (optional, confirmation only - see BallCfg)
+    if cfg.ball.enabled:
+        ball_cache = out / "ball.npz"
+        ball = dict(np.load(ball_cache)) if ball_cache.exists() and not recompute else None
+        if ball is not None and str(ball.get("ball_weights", "")) != Path(cfg.ball.weights).name:
+            ball = None   # cached with a different ball model
+        if ball is None:
+            ball = run_ball(video, meta, cfg.ball, cfg.model.device)
+            np.savez_compressed(ball_cache, **ball)
+        else:
+            log(f"[cache] ball <- {ball_cache}")
+        S["ball_ev"], S["ball_xy"] = ball_evidence(ball, S, cfg.ball, (meta["width"], meta["height"]))
+        S["ball_min_frames"] = cfg.ball.confirm_min_frames
+        log(f"[ball] live ball near the bat in {int((S['ball_ev'] > 0).sum())} frames ({Path(cfg.ball.weights).name})")
+
     # ---- phases
     off_fn = lambda sh: layout_off_sign(det, per_frame, S, sh)
-    shots, labels, onsets = analyse_phases(S, cfg.phase, y, sr, meta["fps"], hand, off_fn)
+    shots, labels, onsets = analyse_phases(S, cfg.phase, y, sr, meta["fps"], hand, off_fn, cfg.ball)
     log(f"[phases] {len(shots)} shot(s); audio {S['audio_state']}")
 
     # ---- KPIs + feedback
@@ -105,6 +120,10 @@ def analyse(video, out_dir, cfg: Config = None, hand="auto", use_bat=True, recom
         warnings.append("Bat tracked in <30% of frames - bat KPIs and bat-based impact are unreliable.")
     if S["audio_state"] != "used":
         warnings.append(f"Audio not used for impact ({S['audio_state']}) - impact from hand/head kinematics only.")
+    if cfg.ball.enabled:
+        nconf = sum(1 for sh in shots if sh["info"].get("ball_confirmed"))
+        warnings.append(f"Ball detection: confirmation only - {nconf}/{len(shots)} shot(s) ball-confirmed "
+                        f"({sum(1 for sh in shots if sh['info'].get('source') == 'ball')} found via the ball-confirmed path).")
     if not shots:
         warnings.append("No swing detected (hand speed never exceeded threshold).")
 
@@ -115,6 +134,7 @@ def analyse(video, out_dir, cfg: Config = None, hand="auto", use_bat=True, recom
         "torso_unit_px": round(S["TU"], 1), "processing_s": round(time.time() - t0, 1),
         "bat_tracked_fraction": round(float(S["bat_valid"].mean()), 3),
         "warnings": warnings, "phase_names": PHASES, "shots": shots,
+        "ball_detection": {"enabled": cfg.ball.enabled, "weights": cfg.ball.weights if cfg.ball.enabled else None},
     }
     (out / "report.json").write_text(json.dumps(report, indent=2, default=_json_default))
     np.save(out / "phase_labels.npy", labels)

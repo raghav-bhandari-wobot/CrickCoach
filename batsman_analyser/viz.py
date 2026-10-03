@@ -94,6 +94,12 @@ class Renderer:
         tr = (tr[np.isfinite(tr).all(1)] * k).astype(np.int32)
         if len(tr) > 1:
             cv2.polylines(img, [tr], False, (255, 0, 255), max(1, int(2 * s)), cv2.LINE_AA)
+        # live ball (only the detections used as confirmation: moving, near the bat, not helmet/glove)
+        bxy = S.get("ball_xy")
+        if bxy is not None:
+            b = self._P(bxy[i])
+            if b:
+                cv2.circle(img, b, int(10 * s), (0, 255, 0), max(1, int(2 * s)), cv2.LINE_AA)
         n = self.shot_of[i]
         if n >= 0:
             st0, st1 = self.shots[n]["info"]["stance_ref"]

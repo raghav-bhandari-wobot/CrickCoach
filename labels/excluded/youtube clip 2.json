@@ -1,0 +1,20 @@
+{
+ "video": "videos/youtube clip 2.mp4",
+ "fps": 30.0,
+ "precision_s": 0.5,
+ "note": "eyeballed by Claude - NOT user-verified. Edited montage of 4 shots with jump cuts/zooms; ball only visible on the last",
+ "shots": [
+  {
+   "impact": 60
+  },
+  {
+   "impact": 110
+  },
+  {
+   "impact": 167
+  },
+  {
+   "impact": 230
+  }
+ ]
+}

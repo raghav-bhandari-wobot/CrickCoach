@@ -1,0 +1,13 @@
+# Overrides for batsman_analyser/config.py (only list what you want to change).
+# Run with another file:  python analyse.py <video> --config my_config.yaml
+
+ball:
+  # Ball detection is CONFIRMATION ONLY: shots are found from the body (pose) rules; the ball never
+  # creates a shot alone and never moves the impact frame. When on, a moving ball near the bat:
+  #   - marks a shot "ball_confirmed" and raises impact confidence to high
+  #   - lets a softer swing without a clear set stance count as a shot (drills, gentle pushes)
+  # Turn off for one run with:  python analyse.py <video> --no-ball
+  enabled: true
+  weights: weights/ball_best.pt     # YOLOv8 'ball' detector (best of the two tested, see README)
+  conf: 0.25
+  confirm_min_frames: 3             # frames with a live ball around the swing to confirm

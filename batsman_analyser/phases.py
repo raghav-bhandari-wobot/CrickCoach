@@ -84,8 +84,9 @@ def _stance_before(hs, hd, hh, p, pcfg, f, ref=0.0):
     return int(bi), int(e)
 
 
-def detect_shots(S, pcfg):
-    """Returns list of (lo, downswing_peak, hi, kind, (stance_lo, stance_hi)), kind in {'shot', 'leave'}.
+def detect_shots(S, pcfg, bcfg=None):
+    """Returns list of (lo, downswing_peak, hi, kind, (stance_lo, stance_hi), source), kind in
+    {'shot', 'leave'}, source in {'body', 'ball'}.
 
     A shot = still stance -> hands up (backlift) -> fast hands-down downswing. Candidate = hand-speed
     peak while the hands are moving DOWN (the follow-through rise is often faster than the
@@ -128,25 +129,56 @@ def detect_shots(S, pcfg):
         after = _rng(hh, p, p + f(1.2), np.nanmin) - base
         if up >= pcfg.leave_min_rise and after > -0.1 and not any(abs(c[0] - p) < f(1.5) for c in cands):
             cands.append((int(p), "leave", st, float(hs[p])))
+    for c in range(len(cands)):
+        cands[c] = cands[c] + ("body",)
+
+    # ball-confirmed path (optional, confirmation only): a softer downswing with no clear set stance
+    # counts only when a moving ball is seen near the bat around it. Never replaces a body-rule shot.
+    ball_ev = S.get("ball_ev")
+    if bcfg is not None and bcfg.enabled and ball_ev is not None:
+        relaxed = []
+        pk2, _ = find_peaks(down, height=bcfg.relaxed_swing_min_speed, distance=max(1, f(0.15)))
+        for p in pk2:
+            if any(abs(c[0] - p) < f(pcfg.shot_min_separation_s) for c in cands):
+                continue
+            n_ball = int(ball_ev[max(0, p - f(bcfg.window_pre_s)):p + f(bcfg.window_post_s) + 1].sum())
+            if n_ball < bcfg.confirm_min_frames:
+                continue
+            drop = _rng(hh, max(0, p - f(0.6)), p, np.nanmax) - _rng(hh, p, p + f(0.6), np.nanmin)
+            hip = S["hip_mid"][max(0, p - f(1.0)):p + f(1.0), 0]
+            walk = (np.nanmax(hip) - np.nanmin(hip)) / S["TU_f"][p] if np.isfinite(hip).any() else 9
+            if walk > pcfg.walk_max_tu or not np.isfinite(drop) or drop < pcfg.shot_min_drop:
+                continue
+            # stance reference for the KPIs: stillest window before, without the stillness requirement
+            w = max(3, f(pcfg.stance_still_s))
+            a0, b0 = max(0, p - f(pcfg.stance_search_s)), max(0, p - f(pcfg.stance_gap_s) - w)
+            m = [hs[s:s + w].mean() + hd[s:s + w].mean() for s in range(a0, b0 + 1)]
+            s0 = a0 + int(np.argmin(m)) if m else a0
+            relaxed.append((int(p), "shot", (int(s0), int(min(p - 1, s0 + w - 1))), float(hs[p]), "ball", n_ball))
+        # one per delivery: the earliest qualifying downswing wins (same rule as the body path)
+        relaxed.sort(key=lambda c: c[0])
+        for c in relaxed:
+            if all(abs(c[0] - k[0]) >= f(pcfg.shot_min_separation_s) for k in cands):
+                cands.append(c[:5])
 
     # one delivery per stance: candidates sharing a stance, or too close together, are the same ball
     # (a shot beats a leave; then the earliest downswing after the stance wins)
     cands.sort(key=lambda c: (c[1] != "shot", c[0]))
     kept = []
     for c in cands:
-        if all(abs(c[0] - k[0]) >= f(pcfg.shot_min_separation_s) and abs(c[2][1] - k[2][1]) > f(0.3)
-               for k in kept):
+        if all(abs(c[0] - k[0]) >= f(pcfg.shot_min_separation_s) and
+               (abs(c[2][1] - k[2][1]) > f(0.3) or "ball" in (c[4], k[4])) for k in kept):
             kept.append(c)
     kept.sort()
     shots = []
-    for n, (p, kind, st, _) in enumerate(kept):
+    for n, (p, kind, st, _, src) in enumerate(kept):
         lo, hi = max(0, st[0]), min(T - 1, p + f(pcfg.shot_post_s))
         if n < len(kept) - 1:
             hi = min(hi, kept[n + 1][2][0] - 1)
         if seg is not None and seg[p] >= 0:   # stay inside this batsman's track
             same = np.where(seg == seg[p])[0]
             lo, hi = max(lo, same[0]), min(hi, same[-1])
-        shots.append((int(lo), int(p), int(hi), kind, st))
+        shots.append((int(lo), int(p), int(hi), kind, st, src))
     return shots
 
 
@@ -216,6 +248,16 @@ def detect_phases(S, shot, pcfg, audio_onsets, hand_override="auto", off_sign=No
         imp, method, conf = k, k_method, "medium" if k_method == "head_lowest" else "low"
     imp = int(max(imp, top + 1)) if kind == "shot" else int(imp)
     ev["impact"] = imp
+    # ---- ball confirmation (never moves the impact frame): a live ball near the bat around impact
+    info["source"] = shot[5] if len(shot) > 5 else "body"
+    ball_ev = S.get("ball_ev")
+    if ball_ev is not None and kind == "shot":
+        w = f(0.4)
+        nb = int(ball_ev[max(0, imp - w):imp + w + 1].sum())
+        info["ball_frames"] = nb
+        info["ball_confirmed"] = bool(nb >= S.get("ball_min_frames", 3) or info["source"] == "ball")
+        if info["ball_confirmed"] and conf != "high":
+            method, conf = method + "+ball", "high"
     info["impact_method"], info["impact_confidence"], info["impact_candidates"] = method, conf, cands
 
     # ---- follow-through end: hands settle (still) or start the recovery back up
@@ -289,7 +331,7 @@ def detect_phases(S, shot, pcfg, audio_onsets, hand_override="auto", off_sign=No
     return ev, info, labels
 
 
-def analyse_phases(S, pcfg, audio_y, sr, video_fps, hand_override="auto", off_sign_fn=None):
+def analyse_phases(S, pcfg, audio_y, sr, video_fps, hand_override="auto", off_sign_fn=None, bcfg=None):
     ons = audio_mod.onsets(audio_y, sr, z_min=pcfg.audio_z_min) if audio_y is not None else []
     dur = S["T"] / video_fps
     audio_state = "none" if audio_y is None else "used"
@@ -298,7 +340,7 @@ def analyse_phases(S, pcfg, audio_y, sr, video_fps, hand_override="auto", off_si
         ons = []
     S["audio_state"] = audio_state
     ons_f = [(int(round(t * video_fps)), z) for t, z in ons]       # audio runs on the video clock
-    shots = detect_shots(S, pcfg)
+    shots = detect_shots(S, pcfg, bcfg)
     labels = np.zeros(S["T"], np.int8)
     results = []
     for sh in shots:

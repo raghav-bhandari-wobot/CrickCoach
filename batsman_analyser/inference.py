@@ -154,3 +154,33 @@ def run_bat(video, meta, bat_box, wrist_xy, mcfg, progress=True):
     if progress:
         print()
     return out
+
+
+MAX_BALLS = 10   # detections kept per frame (balls lying around a net can be many)
+
+
+def run_ball(video, meta, bcfg, device="", progress=True):
+    """Full-frame ball detector pass (the ball is only a few pixels wide - a crop does not help).
+    Keeps every detection; which one is the live ball is decided later from motion and position
+    (signals.ball_evidence). Output: ball_xyc (T, MAX_BALLS, 3) = x, y, conf (NaN padded)."""
+    from ultralytics import YOLO
+    dev = _device(device)
+    model = YOLO(bcfg.weights)
+    T = meta["n_frames"]
+    out = np.full((T, MAX_BALLS, 3), np.nan, np.float32)
+    keep = min(0.15, bcfg.conf)   # keep weaker ones too: they tell a ball lying still from a moving one
+    for i, frame in iter_frames(video):
+        if i >= T:
+            break
+        r = model.predict(frame, imgsz=bcfg.imgsz, conf=keep, device=dev, half=dev.startswith("cuda"),
+                          verbose=False)[0]
+        if r.boxes is not None and len(r.boxes):
+            xy = r.boxes.xywh.cpu().numpy()[:, :2]
+            c = r.boxes.conf.cpu().numpy()
+            o = np.argsort(-c)[:MAX_BALLS]
+            out[i, :len(o), :2], out[i, :len(o), 2] = xy[o], c[o]
+        if progress and i % 50 == 0:
+            print(f"\r[ball] frame {i}/{T}", end="", flush=True)
+    if progress:
+        print()
+    return {"ball_xyc": out, "ball_weights": np.array(os.path.basename(bcfg.weights))}

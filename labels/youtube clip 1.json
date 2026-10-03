@@ -1,0 +1,17 @@
+{
+ "video": "videos/youtube clip 1.mp4",
+ "fps": 30.0,
+ "precision_s": 0.5,
+ "note": "eyeballed by Claude frame-by-frame - NOT user-verified. 4-11 s = coach demo without ball; 25-28 s = slow-mo instant replay of the 22.9 s ball (not a new delivery); 28 s+ end card",
+ "shots": [
+  {
+   "impact": 354
+  },
+  {
+   "impact": 506
+  },
+  {
+   "impact": 688
+  }
+ ]
+}

@@ -7,7 +7,7 @@
 import argparse
 from pathlib import Path
 
-from batsman_analyser.config import Config
+from batsman_analyser.config import load_config
 from batsman_analyser.pipeline import analyse
 from batsman_analyser.viz import Renderer, keyframes, play, signals_plot, write_video
 
@@ -25,7 +25,11 @@ def print_summary(report):
         print(f"\n-- Shot {n}: {K['shot_type']['value']}  ({K['shot_type']['unit']})  "
               f"hand={inf['handedness']}")
         print("   events (s): " + ", ".join(f"{k}={v}" for k, v in e.items() if v is not None))
-        print(f"   impact via {inf['impact_method']} (confidence {inf['impact_confidence']})")
+        ball = ""
+        if "ball_confirmed" in inf:
+            ball = f"  | ball {'confirmed' if inf['ball_confirmed'] else 'not seen'} ({inf['ball_frames']} fr)"
+        print(f"   impact via {inf['impact_method']} (confidence {inf['impact_confidence']}){ball}"
+              + ("  [found via ball-confirmed path]" if inf.get("source") == "ball" else ""))
         for k in K.values():
             if k["name"].startswith("Shot type"):
                 continue
@@ -46,7 +50,9 @@ def main():
     ap.add_argument("input", help="video file or folder")
     ap.add_argument("--out", default="out")
     ap.add_argument("--hand", default="auto", choices=["auto", "R", "L"], help="batsman handedness")
+    ap.add_argument("--config", default="config.yaml", help="YAML overrides of batsman_analyser/config.py")
     ap.add_argument("--no-bat", action="store_true", help="skip bat detection")
+    ap.add_argument("--no-ball", action="store_true", help="skip ball confirmation (overrides config)")
     ap.add_argument("--bat-weights", default=None, help="custom bat detector or other YOLOE weights")
     ap.add_argument("--pose-weights", default=None)
     ap.add_argument("--device", default="", help="e.g. cuda:0 or cpu (default auto)")
@@ -58,7 +64,9 @@ def main():
     ap.add_argument("--no-video", action="store_true", help="do not write annotated.mp4")
     args = ap.parse_args()
 
-    cfg = Config()
+    cfg = load_config(args.config)
+    if args.no_ball:
+        cfg.ball.enabled = False
     cfg.model.device = args.device
     cfg.time.slowmo = args.slowmo
     if args.imgsz:

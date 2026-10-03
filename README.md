@@ -3,7 +3,8 @@
 Front-on (bowler's end) cricket batting video → **shot phases**, **KPIs**, **coaching cues**,
 and an OpenCV overlay player. See `PLAN.md` for the design and KPI definitions.
 
-Models: `yolo26m-pose.pt` (pose) + `yoloe-26m-seg.pt` (zero-shot "cricket bat" masks; no ball detection for now),
+Models: `yolo26m-pose.pt` (pose) + `yoloe-26m-seg.pt` (zero-shot "cricket bat" masks) + optional `weights/ball_best.pt`
+(YOLOv8 ball detector, **confirmation only** - see below),
 plus audio onset detection for the bat-ball "crack". Weights auto-download into `weights/` on first run.
 
 ## Setup
@@ -41,6 +42,27 @@ Outputs in `out/<clip>/`:
 | `signals.png` | hand height, speeds, head, ankles, bat angle with phase shading and audio onsets — for tuning |
 | `pose.npz`, `bat.npz` | inference cache (delete or `--recompute` to redo) |
 
+## Configuration
+Defaults live in `batsman_analyser/config.py`; override any of them in `config.yaml` (or `--config other.yaml`):
+```yaml
+ball:
+  enabled: true                 # false -> body rules only (same as --no-ball)
+  weights: weights/ball_best.pt
+phase:
+  swing_min_speed: 3.0
+```
+
+### Ball detection = confirmation only
+Shots are always found from the body (pose) rules, and the impact frame is always "head lowest". The ball never
+creates a shot by itself and never moves the impact. A *live* ball (moving, near the hands, below the chest, not the
+helmet / a glove / the lifted bat handle) seen around the swing:
+* marks the shot `ball_confirmed` and raises impact confidence to `high`;
+* lets a softer swing without a clear set stance count as a shot (`source: "ball"` in report.json) - coaching drills,
+  gentle defensive pushes.
+Two ball models were compared (`tools/ball_test.py`): `best.pt` (class `ball`) separates real deliveries from demo swings
+on 1080p footage; `best(1).pt` (`tennis-ball`) missed the live ball. On 720p indoor clips the live ball is too small for
+either, so those clips run on the body rules unchanged.
+
 ## Phases
 `STANCE → BACKLIFT → DOWNSWING → IMPACT → FOLLOW-THROUGH → FINISH`, plus front-foot lift/plant events.
 A shot = still stance → backlift → fast hands-down downswing. Impact = head lowest after the downswing (audio crack overrides when clean).
@@ -60,6 +82,7 @@ All thresholds live in `batsman_analyser/config.py`.
   Next step: fine-tune a bat detector on a Roboflow cricket-bat dataset and pass `--bat-weights`.
 * Batsman tracking can switch to the wicket-keeper when the camera is close behind the stumps (Sample 7 clips):
   phases then follow the wrong person. Those clips are excluded from evaluation (`labels/excluded/`) until tracking is fixed.
+* Edited footage (jump cuts, zooms, slow-motion replays) is not handled - a replay is counted as another shot.
 * Handedness is guessed from which foot strides; override with `--hand`.
 * Rotation / sequencing KPIs are 2D proxies (projected shoulder/hip width).
 * Thresholds are initial heuristics until tuned on labelled footage.

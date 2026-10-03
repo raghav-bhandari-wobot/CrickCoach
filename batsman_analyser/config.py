@@ -4,7 +4,8 @@ Distances are in torso units (TU = median shoulder-mid -> hip-mid length during 
 speeds in TU/s, times in seconds unless stated. Values are initial heuristics and are meant
 to be tuned with tools/evaluate.py against hand-labelled videos.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from pathlib import Path
 
 
 @dataclass
@@ -19,6 +20,31 @@ class ModelCfg:
     crop_expand_w: float = 2.2        # crop around batsman bbox for bat detection
     crop_expand_h: float = 1.5
     device: str = ""                  # "" -> auto (cuda:0 if available)
+
+
+@dataclass
+class BallCfg:
+    """Ball detection is CONFIRMATION ONLY. It never creates a shot on its own and never moves the
+    impact frame (impact stays = head lowest). A moving ball near the bat around the swing:
+      (a) raises impact confidence to "high" (ball_confirmed in report.json),
+      (b) lets a softer swing without a clear set stance count as a shot (coaching drills, gentle
+          defensive pushes) - those would otherwise be rejected as waggles / shadow swings.
+    Validated: works on 1080p footage (YouTube clip 1); on small/blurred 720p balls (Sample 29) it
+    rarely fires, so those clips fall back to the body rules unchanged."""
+    enabled: bool = True
+    weights: str = "weights/ball_best.pt"   # YOLOv8 single-class 'ball' detector
+    imgsz: int = 1280                 # full frame - the ball is a few pixels wide
+    conf: float = 0.25
+    near_hands_tu: float = 1.5        # live ball must be this close to the hands / bat
+    ignore_head_tu: float = 0.5       # the helmet is often detected as a ball
+    ignore_wrist_tu: float = 0.3      # ... and so are white gloves
+    static_frac: float = 0.004        # moved < this x frame size in 5 frames -> a ball lying on the ground
+    max_height_tu: float = 0.5        # live ball reaches the bat below the chest (TU above the hips)
+    attached_tu: float = 0.3          # moves with the hands (within this, over 5 frames) -> bat handle / glove
+    window_pre_s: float = 0.6         # evidence counted in [downswing - pre, downswing + post]
+    window_post_s: float = 0.8
+    confirm_min_frames: int = 3       # frames with a live ball needed to confirm
+    relaxed_swing_min_speed: float = 1.5   # TU/s downswing for a ball-confirmed shot without a set stance
 
 
 @dataclass
@@ -97,3 +123,30 @@ class Config:
     smooth: SmoothCfg = field(default_factory=SmoothCfg)
     phase: PhaseCfg = field(default_factory=PhaseCfg)
     kpi: KpiCfg = field(default_factory=KpiCfg)
+    ball: BallCfg = field(default_factory=BallCfg)
+
+
+def load_config(path=None):
+    """Defaults from the dataclasses above, overridden by a YAML file (config.yaml by default):
+
+        ball:
+          enabled: false
+        phase:
+          swing_min_speed: 3.0
+    """
+    cfg = Config()
+    path = Path(path) if path else Path("config.yaml")
+    if not path.exists():
+        return cfg
+    import yaml
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    for sec, vals in data.items():
+        if not hasattr(cfg, sec) or not isinstance(vals, dict):
+            raise ValueError(f"{path}: unknown section '{sec}'")
+        obj = getattr(cfg, sec)
+        names = {f.name: f for f in fields(obj)}
+        for k, v in vals.items():
+            if k not in names:
+                raise ValueError(f"{path}: unknown key '{sec}.{k}'")
+            setattr(obj, k, tuple(v) if isinstance(v, list) else v)
+    return cfg

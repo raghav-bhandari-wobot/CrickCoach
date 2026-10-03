@@ -194,3 +194,45 @@ def build_signals(det, per_frame, bat, meta, scfg, seg_id=None):
     S["bat_toe_h"] = (S["hip_mid"][:, 1] - toe[:, 1]) / TUf
     S["bat_toe_speed"] = speed(toe, fps) / TUf
     return S
+
+
+def ball_evidence(ball, S, bcfg, frame_wh):
+    """Per frame: how many ball detections look like the LIVE ball - moving (not lying on the ground
+    or carried with the bat), near the hands / bat, below the chest, and not the helmet, gloves or lifted bat handle (all get detected as balls).
+    Returns (count per frame, xy of the best one per frame for drawing)."""
+    xyc = ball["ball_xyc"]
+    T = min(len(xyc), S["T"])
+    ev = np.zeros(S["T"], np.int16)
+    best = np.full((S["T"], 2), np.nan)
+    static_px = bcfg.static_frac * max(frame_wh)
+    TU, hands, head, wr = S["TU_f"], S["hands"], S["head"], S["kp"][:, [LW, RW]]
+    for i in range(T):
+        d = xyc[i]
+        d = d[np.isfinite(d[:, 0]) & (d[:, 2] >= bcfg.conf)]
+        if not len(d) or not np.isfinite(TU[i]) or not np.all(np.isfinite(hands[i])):
+            continue
+        p = xyc[i - 5] if i >= 5 else xyc[i][:0]
+        p = p[np.isfinite(p[:, 0])]
+        top = 0.0
+        for x, y, c in d:
+            q = np.array([x, y])
+            if np.all(np.isfinite(head[i])) and np.linalg.norm(q - head[i]) / TU[i] < bcfg.ignore_head_tu:
+                continue
+            if any(np.all(np.isfinite(w)) and np.linalg.norm(q - w) / TU[i] < bcfg.ignore_wrist_tu for w in wr[i]):
+                continue
+            if np.linalg.norm(q - hands[i]) / TU[i] > bcfg.near_hands_tu:
+                continue
+            if np.isfinite(S["hip_mid"][i, 1]) and (S["hip_mid"][i, 1] - y) / TU[i] > bcfg.max_height_tu:
+                continue              # up at the shoulders/head: the lifted bat handle, not a delivery
+            if len(p):
+                j = int(np.argmin(np.hypot(p[:, 0] - x, p[:, 1] - y)))
+                move = q - p[j, :2]
+                if np.hypot(*move) <= static_px:
+                    continue          # lying on the ground
+                dh = hands[i] - hands[i - 5] if i >= 5 and np.all(np.isfinite(hands[i - 5])) else np.zeros(2)
+                if np.linalg.norm(move - dh) / TU[i] < bcfg.attached_tu:
+                    continue          # moves with the hands: the bat handle / glove, not the ball
+            ev[i] += 1
+            if c > top:
+                top, best[i] = c, q
+    return ev, best
